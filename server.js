@@ -1,46 +1,44 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Middleware to parse incoming data from the ESP32 POST request
-app.use(express.urlencoded({ extended: true }));
+// Middleware to let the server read JSON data sent by the ESP32
 app.use(express.json());
 
-// Serve static frontend files (put your index.html inside a folder named 'public')
-app.use(express.static(path.join(__dirname, 'public')));
+// Serve your frontend map from the 'public' folder
+app.use(express.static('public'));
 
-// Keep track of the latest coordinates in memory
-let latestLocation = { lat: 7.7885, lon: 122.5866, device: 'thesis-device' };
+// 1. The Route where your ESP32 pushes GPS coordinates
+app.post('/update', (req, res) => {
+    const { lat, lon } = req.body;
+    console.log(`Received GPS -> Lat: ${lat}, Lon: ${lon}`);
 
-// 1. ESP32 sends GPS POST requests here
-app.post('/update-location', (req, res) => {
-    const { lat, lon, device } = req.body;
-    
-    if (lat && lon) {
-        latestLocation = { 
-            lat: parseFloat(lat), 
-            lon: parseFloat(lon), 
-            device: device || 'unknown' 
-        };
-        
-        console.log(`[GPS Received] Lat: ${lat}, Lon: ${lon} | Device: ${device}`);
+    // Broadcast the new coordinates live to the browser map via WebSockets
+    io.emit('location-update', { lat, lon });
 
-        // Broadcast the new location to any open browser map instantly
-        io.emit('location-update', latestLocation);
-
-        res.status(200).send('Location updated successfully');
-    } else {
-        res.status(400).send('Invalid coordinates');
-    }
+    res.status(200).send({ status: 'Coordinates received' });
 });
 
-// Start the server
+// 2. The Route where your ESP32 kill-switch sends the terminate signal
+app.post('/terminate', (req, res) => {
+    console.log('Terminate signal received from hardware.');
+
+    // Broadcast the stop signal to the browser dashboard to turn the box green
+    io.emit('tracking-stopped', { message: 'Tracking session terminated. User is safe.' });
+
+    res.status(200).send({ status: 'Session terminated' });
+});
+
+// Socket.io connection monitor
+io.on('connection', (socket) => {
+    console.log('A client connected to the live map dashboard.');
+});
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Tracking server running on http://localhost:${PORT}`);
+    console.log(`Server is running live on port ${PORT}`);
 });
