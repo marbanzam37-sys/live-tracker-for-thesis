@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Tracker Location</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: Arial, sans-serif;
+        }
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+        #info-box {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            z-index: 1000;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="info-box">
+        <h3>Live Tracker Dashboard</h3>
+        <p id="status">Waiting for data...</p>
+    </div>
+
+    <div id="map"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <!-- Socket.io Library -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        // Initialize global socket connection
+        window.socket = io();
+
+        // Initialize map centered on default location (Ipil, Philippines)
+        const map = L.map('map').setView([7.7885, 122.5866], 15);
+
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        // Drop initial marker on the map
+        let marker = L.marker([7.7885, 122.5866]).addTo(map);
+        marker.bindPopup("<b>Current Location</b><br>Last known position.").openPopup();
+        
+        // Function to update marker position dynamically when GPS data arrives
+        function updateLocation(lat, lon) {
+            marker.setLatLng([lat, lon]);
+            map.panTo([lat, lon]);
+            document.getElementById('status').innerText = `Lat: ${lat}, Lon: ${lon}`;
+        }
+
+        // Listen for the terminate signal from your physical ESP32 kill-switch button
+        window.socket.on('tracking-stopped', (data) => {
+            console.log(data.message);
+            document.getElementById('status').innerText = data.message;
+            document.getElementById('status').style.color = 'green'; // Turns text green for safe status
+        });
+    </script>
+</body>
+</html>
