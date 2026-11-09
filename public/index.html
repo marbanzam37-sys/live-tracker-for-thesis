@@ -3,75 +3,99 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live Tracker Location</title>
+    <title>Thesis Live Tracker</title>
+    
     <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
     <style>
-        body, html {
+        body {
             margin: 0;
             padding: 0;
-            height: 100%;
             font-family: Arial, sans-serif;
         }
         #map {
+            width: 100vw;
             height: 100vh;
-            width: 100%;
         }
         #info-box {
             position: absolute;
-            top: 10px;
-            left: 10px;
-            background: white;
-            padding: 10px 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            top: 20px;
+            right: 20px;
             z-index: 1000;
-            font-size: 14px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            max-width: 250px;
+        }
+        #status {
+            font-weight: bold;
+            color: #d9534f;
         }
     </style>
 </head>
 <body>
 
+    <!-- Floating Info Panel -->
     <div id="info-box">
-        <h3>Live Tracker Dashboard</h3>
-        <p id="status">Waiting for data...</p>
+        <h3>Tracker Status</h3>
+        <p>Status: <span id="status">Active & Monitoring</span></p>
     </div>
 
+    <!-- Map Container -->
     <div id="map"></div>
 
     <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-    <!-- Socket.io Library -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Socket.io client script -->
     <script src="/socket.io/socket.io.js"></script>
+
     <script>
         // Initialize global socket connection
         window.socket = io();
 
-        // Initialize map centered on default location (Ipil, Philippines)
-        const map = L.map('map').setView([7.7885, 122.5866], 15);
+        // Default starting coordinates (Centering over Ipil / Zamboanga region area as a default)
+        const defaultLat = 7.7885;
+        const defaultLon = 122.5857;
+
+        // Initialize the Leaflet Map
+        const map = L.map('map').setView([defaultLat, defaultLon], 15);
 
         // Add OpenStreetMap tiles
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
-            attribution: '© OpenStreetMap'
+            attribution: '&copy; OpenStreetMap contributors'
         }).addTo(map);
 
-        // Drop initial marker on the map
-        let marker = L.marker([7.7885, 122.5866]).addTo(map);
-        marker.bindPopup("<b>Current Location</b><br>Last known position.").openPopup();
-        
-        // Function to update marker position dynamically when GPS data arrives
+        // Create marker for the tracker
+        let trackerMarker = L.marker([defaultLat, defaultLon]).addTo(map)
+            .bindPopup("<b>ESP32 Tracker</b><br>Waiting for GPS signal...")
+            .openPopup();
+
+        // Function to update marker position on the map
         function updateLocation(lat, lon) {
-            marker.setLatLng([lat, lon]);
-            map.panTo([lat, lon]);
-            document.getElementById('status').innerText = `Lat: ${lat}, Lon: ${lon}`;
+            const newLatLng = [lat, lon];
+            trackerMarker.setLatLng(newLatLng);
+            map.setView(newLatLng, map.getZoom());
+            trackerMarker.setPopupContent(`<b>ESP32 Tracker</b><br>Lat: ${lat.toFixed(6)}<br>Lon: ${lon.toFixed(6)}`).openPopup();
         }
+
+        // --- SOCKET LISTENERS ---
+
+        // Listen for live GPS updates coming from the server
+        window.socket.on('location-update', (data) => {
+            console.log("New coordinates received:", data);
+            updateLocation(data.lat, data.lon);
+        });
 
         // Listen for the terminate signal from your physical ESP32 kill-switch button
         window.socket.on('tracking-stopped', (data) => {
             console.log(data.message);
-            document.getElementById('status').innerText = data.message;
-            document.getElementById('status').style.color = 'green'; // Turns text green for safe status
+            const statusEl = document.getElementById('status');
+            statusEl.innerText = data.message;
+            statusEl.style.color = 'green';
+            trackerMarker.bindPopup("<b>Tracker Terminated</b><br>Session ended safely.").openPopup();
         });
     </script>
 </body>
